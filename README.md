@@ -1,7 +1,7 @@
 # Analytical approach to the inversion of Fisher randomization tests
 
 ## Overview
-This project provides R scripts and functions for constructing randomization-based confidence intervals and simulating results. The repository includes the following key components:
+This project provides R scripts and functions for constructing randomization-based confidence intervals (RBCI) by analytically inverting Fisher's randomization tests (FRT). The repository includes the following key components:
 
 ### Contents
 
