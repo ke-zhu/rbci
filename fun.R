@@ -49,7 +49,7 @@ solve_theta <- function(z, zp, Y) {
 }
 
 
-# rbci --------------------------------------------------------------
+# utility functions --------------------------------------------------------------
 
 pvalue <- function(theta, z, Y, z_set, H1 = "!=") {
   stat_obs <- t_stat(z, Y)
@@ -99,6 +99,8 @@ plot_p_fun <- function(z, Y, z_set, H1 = ">") {
          main = TeX(r'($H_1^{\theta-}:$ $Y_i(1) - Y_i(0) < \theta$)'))
   }
 }
+
+# rbci --------------------------------------------------------------
 
 rbci <- function(z, Y, z_set, sig_level = 0.05, H1 = "!=") {
   theta_jump_set <- map_dfr(z_set, ~ solve_theta(z, ., Y)) %>% 

@@ -1,5 +1,4 @@
 library(tidyverse)
-library(parallel)
 library(tictoc)
 library(latex2exp)
 source("fun.R")
@@ -159,30 +158,70 @@ toc()
 # 1.7 repeated sampling performance --------
 
 tic()
-inf_res_small_n <- mclapply(z_set, function(z) {
+inf_res_small_n <- map_dfr(z_set, function(z) {
   Y <- z * Y1 + (1 - z) * Y0
   tibble(rbci(z, Y, z_set), p_value = pvalue(0, z, Y0, z_set, H1 = "!="))
-}, mc.cores = 4) %>% map_dfr(~.)
+})
 runtime_small_n <- toc()
 
-(metrics_small_n <- inf_res_small_n %>% 
-    summarise(
-      CP = mean((ci_l <= tau) & (ci_u >= tau)), 
-      `Type I` = mean(p_value <= 0.05)
-    ))
+tau <- 1
+metrics_small_n <- inf_res_small_n %>% 
+  summarise(
+    CP = mean((ci_l <= tau) & (ci_u >= tau)), 
+    `Type I` = mean(p_value <= 0.05)
+  )
 
 
 
 
-# 2 simulation for n = 100 -----------------------------------------
+# 2 simulation for large n -----------------------------------------
 
-# 2.1 data --------
+# 2.1 time of proposed method --------
 
 RNGkind("L'Ecuyer-CMRG")
 set.seed(2024)
 
-n_fisher <- 10^4
-n_rep <- 1000
+n_seq <- c(50, 100, 500, 1000, 5000, 10000)
+n_fisher_seq <- c(10^4, 2*10^4)
+
+single_sim_res <- map_dfr(n_seq, function(n) {
+  # data
+  n1 <- n / 2
+  Y0 <- rnorm(n)
+  tau <- 1
+  Y1 <- Y0 + tau
+  z <- rep(0, n)
+  z[sample(n, n1)] <- 1
+  Y <- z * Y1 + (1 - z) * Y0
+  map_dfr(n_fisher_seq, function(n_fisher) {
+    # reference assignments
+    z_set <- map(1:n_fisher, ~ {
+      zp <- rep(0, n)
+      zp[sample(n, n1)] <- 1
+      zp
+    })
+    # FRT
+    tic()
+    pvalue(0, z, Y, z_set, "!=")
+    t_p <- toc()
+    # RBCI
+    tic()
+    rbci(z, Y, z_set)
+    t_ci <- toc()
+    # summary
+    tibble(
+      n,
+      n_fisher,
+      time_p = t_p$toc - t_p$tic,
+      time_ci = t_ci$toc - t_ci$tic
+    )
+  })
+})
+
+
+# 2.2 time of grid method --------
+
+# data
 n <- 100
 n1 <- n / 2
 Y0 <- rnorm(n)
@@ -191,36 +230,12 @@ Y1 <- Y0 + tau
 z <- rep(0, n)
 z[sample(n, n1)] <- 1
 Y <- z * Y1 + (1 - z) * Y0
-if (choose(n, n1) <= n_fisher) {
-  z_set <- map(1:choose(n, n1), ~ {
-    zp <- rep(0, n)
-    zp[combn(n, n1)[, .x]] <- 1
-    zp
-  })
-} else {
-  z_set <- map(1:n_fisher, ~ {
-    zp <- rep(0, n)
-    zp[sample(n, n1)] <- 1
-    zp
-  })
-}
-
-
-# 2.2 pvalue & rbci --------
-
-plot_p_fun(z, Y, z_set, H1 = ">")
-plot_p_fun(z, Y, z_set, H1 = "<")
-
-tic()
-pvalue(0, z, Y, z_set, "!=")
-toc()
-
-tic()
-rbci(z, Y, z_set)
-toc()
-
-
-# 2.3 grid method --------
+n_fisher <- 10000
+z_set <- map(1:n_fisher, ~ {
+  zp <- rep(0, n)
+  zp[sample(n, n1)] <- 1
+  zp
+})
 
 n_grid <- 100
 init <- t.test(Y[z==1], Y[z==0], conf.level = 0.999)$conf.int
@@ -231,38 +246,22 @@ p_grid <- map_dbl(grid, ~ {
 })
 runtime_grid <- toc()
 
-(runtime_grid$toc - runtime_grid$tic) / n_grid * 2 * n_fisher / 3600
+time_grid_hour <- (runtime_grid$toc - runtime_grid$tic) / n_grid * 2 * n_fisher / 3600
 
-pfun <- stepfun(grid[-1], p_grid)
-plot(pfun, verticals = F, do.points = F, 
-     xlab = TeX(r'($\theta$)'),
-     ylab = TeX(r'($p^+(\theta)$)'),
-     main = TeX(r'($H_1^{\theta+}: Y_i(1) - Y_i(0) > \theta$)'))
-
-
-
-# 2.4 repeated sampling performance --------
-
-tic()
-inf_res_large_n <- mclapply(1:n_rep, function(rep) {
-  z <- rep(0, n)
-  z[sample(n, n1)] <- 1
-  Y <- z * Y1 + (1 - z) * Y0
-  tibble(rbci(z, Y, z_set), p_value = pvalue(0, z, Y0, z_set, H1 = "!="))
-}, mc.cores = 4) %>% map_dfr(~.)
-runtime_large_n <- toc()
+# pfun <- stepfun(grid[-1], p_grid)
+# plot(pfun, verticals = F, do.points = F, 
+#      xlab = TeX(r'($\theta$)'),
+#      ylab = TeX(r'($p^+(\theta)$)'),
+#      main = TeX(r'($H_1^{\theta+}: Y_i(1) - Y_i(0) > \theta$)'))
 
 
-(metrics_large_n <- inf_res_large_n %>% 
-    summarise(
-      CP = mean((ci_l <= tau) & (ci_u >= tau)), 
-      `Type I` = mean(p_value <= 0.05)
-    ))
+
+# save output -------------------------------------------------------------
 
 
 save(
   inf_res_small_n, runtime_small_n, metrics_small_n, 
-  inf_res_large_n, runtime_large_n, metrics_large_n, 
+  single_sim_res, time_grid_hour,
   file = "output/metrics.RData"
 )
 

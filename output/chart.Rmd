@@ -1,0 +1,54 @@
+---
+output: 
+  pdf_document:
+    keep_tex: yes
+---
+
+```{r, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, cache = F)
+library(tidyverse)
+library(kableExtra)
+```
+
+
+```{r tab:sim, results='asis'}
+load(file = "metrics.RData")
+
+res <- map_dfr(1:12, ~ {
+  load(file = str_glue("metrics_supp_{.x}.RData"))
+  sim_res %>% 
+    # show the computational time on personal MacBook
+    mutate(
+      time_p = round(single_sim_res$time_p[.x], 1),
+      time_ci = round(single_sim_res$time_ci[.x], 1)
+    ) %>% 
+    rename(
+      `$n$` = n,
+      `$n_{\\text{fisher}}$` = n_fisher,
+      `Coverage` = CP,
+      `Type I Error` = `Type I`,
+      `Time for $p$-value (sec.)` = time_p,
+      `Time for RBCI (sec.)` = time_ci
+    )
+})
+
+res %>% 
+  kbl(
+    label = str_glue("sim"),
+    centering = T, 
+    booktabs = T, 
+    linesep = "",
+    position = "p",
+    escape = F,
+    align = "rccccc",
+    caption = "Simulation results for different $n$ and $n_{\\text{fisher}}$."
+  ) %>%
+  kable_styling() %>% 
+  row_spec(2 * (1:5), hline_after = T) %>% 
+  footnote(
+    general_title = "",
+    general = "Note: ``Coverage'' is the empirical coverage probability in 1000 replications; ``Time for $p$-value (sec.)'' and ``Time for RBCI (sec.)'' are the time required for calculating one $p$-value/RBCI on a personal laptop, not the time required for 1000 replications.",
+    threeparttable = T,
+    escape = F
+  )
+```
